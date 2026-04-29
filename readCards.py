@@ -14,7 +14,7 @@ DB_CONFIG = {
     "port": "5432",
     "database": "postgres",
     "user": "ddt",
-    "password": "Xmac2020@",
+    "password": "dskljfdl",
 }
 # ─────────────────────────────────────────────────────────────────────────────
 
