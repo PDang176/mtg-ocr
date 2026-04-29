@@ -306,8 +306,3 @@ def bulk_insert_cards():
             cur.close()
         if conn:
             conn.close()
-
-
-if __name__ == "__main__":
-    test_connection()
-    bulk_insert_cards()
