@@ -7,14 +7,18 @@ from io import BytesIO
 from rapidocr import RapidOCR
 from rapidfuzz.distance import Levenshtein
 import numpy as np
+import os
+from dotenv import load_dotenv, find_dotenv
 
 # ── Fill in your credentials ──────────────────────────────────────────────────
+load_dotenv(find_dotenv())
+
 DB_CONFIG = {
-    "host": "localhost",
-    "port": "5432",
-    "database": "postgres",
-    "user": "ddt",
-    "password": "Xmac2020`",
+    "host": os.getenv("DB_HOST", "localhost"),
+    "port": os.getenv("DB_PORT", "5432"),
+    "database": os.getenv("DB_NAME", "postgres"),
+    "user": os.getenv("DB_USER", "postgres"),
+    "password": os.getenv("DB_PASSWORD", "postgres"),
 }
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -48,7 +52,13 @@ OCR_SUBSTITUTIONS = {
 }
 # ─────────────────────────────────────────────────────────────────────────────
 
-engine = RapidOCR()
+engine = RapidOCR(
+    params={
+        "Det.model_path": "models/det.onnx",
+        "Cls.model_path": "models/cls.onnx",
+        "Rec.model_path": "models/rec.onnx",
+    }
+)
 
 
 def clean_ocr_text(raw: str) -> str:
