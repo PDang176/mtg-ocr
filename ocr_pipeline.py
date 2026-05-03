@@ -2,9 +2,9 @@ import json
 import os
 
 from config import Config
-from card_loader import CardLoader
-from image_processor import ImageProcessor
-from rapidocr_processor import RapidOCRProcessor
+from database.card_loader import CardLoader
+from processors.image_processor import ImageProcessor
+from processors.rapidocr_processor import RapidOCRProcessor
 from card_classifier import CardClassifier, LEV_THRESHOLD
 from PIL import Image
 
