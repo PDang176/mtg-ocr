@@ -1,4 +1,5 @@
 import json
+import os
 
 from config import Config
 from card_loader import CardLoader
@@ -102,9 +103,12 @@ class OCRPipeline:
         print(f"❌ Wrong:        {total - correct}/{total}")
 
     def _save(self, results):
-        with open("ocr_results.json", "w") as f:
+        base_dir = os.path.dirname(__file__)
+        file_path = os.path.join(base_dir, "json", "ocr_results.json")
+
+        with open(file_path, "w") as f:
             json.dump(results, f, indent=2)
-            print("\nResults saved to ocr_results.json")
+            print(f"\nResults saved to {file_path}")
 
 
 # ─────────────────────────────────────────────────────────────
