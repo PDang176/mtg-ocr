@@ -6,10 +6,12 @@
 
 ## Setup
 
-1. Initialize .env file using template
-2. Set up Postgresql Database
+1. Set up python venv
+2. Install python libraries using `pip install -r requirements.txt`
+3. Initialize .env file using template
+4. Set up Postgresql Database
     - Download oracle bulk data set from [Scryfall](https://scryfall.com/docs/api/bulk-data)
-    - Move bulk data to json folder and rename to ```scryfall_data.json```
+    - Move bulk data to json folder and rename to `scryfall_data.json`
     - Run create_database.py
 
 ## Usage
