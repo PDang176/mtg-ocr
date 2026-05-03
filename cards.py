@@ -2,19 +2,14 @@ import json
 import psycopg2
 from psycopg2.extras import execute_values, Json
 
-# This section you need to your credentials for postgres instance
-
 DB_CONFIG = {
     "host": "localhost",
     "port": "5432",
     "database": "postgres",
-    "user": "patrick",
-    "password": "yourpassword",
+    "user": "",
+    "password": "@",
 }
 
-
-# IMPORTANT this is the file name of what you should nanme the downloaded file name
-# Scryfall
 JSON_FILE_PATH = "scryfall_data.json"
 BATCH_SIZE = 1000
 
@@ -306,3 +301,8 @@ def bulk_insert_cards():
             cur.close()
         if conn:
             conn.close()
+
+
+if __name__ == "__main__":
+    test_connection()
+    bulk_insert_cards()
