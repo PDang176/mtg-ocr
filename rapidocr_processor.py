@@ -1,6 +1,5 @@
 import re
 
-from config import Config
 from rapidocr import RapidOCR
 
 # ── OCR substitution table ────────────────────────────────────────────────────
@@ -21,8 +20,7 @@ OCR_SUBSTITUTIONS = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 class RapidOCRProcessor:
-    def __init__(self, config: Config):
-        self.config = config
+    def __init__(self):
         self.engine = RapidOCR(
           params={
               "Det.model_path": "models/det.onnx",
@@ -31,7 +29,13 @@ class RapidOCRProcessor:
             }
           )
 
-    def __clean_text(raw: str) -> str:
+    def extract_text(self, image_array):
+        result = self.engine(image_array)
+        raw = " ".join(result.txts).strip() if result.txts else ""
+        clean = self.__clean_text(raw)
+        return raw, clean
+
+    def __clean_text(self, raw: str) -> str:
       if not raw:
           return ""
 
@@ -41,9 +45,3 @@ class RapidOCRProcessor:
       cleaned = re.sub(r"\s+", " ", cleaned).strip()
       
       return cleaned.lower()
-
-    def extract_text(self, image_array):
-        result = self.engine(image_array)
-        raw = " ".join(result.txts).strip() if result.txts else ""
-        clean = self.__clean_text(raw)
-        return raw, clean

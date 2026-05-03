@@ -4,14 +4,18 @@ from config import Config
 
 class CardLoader:
     def __init__(self, config: Config):
-        self.conn = psycopg2.connect(**config.DB_CONFIG)
+        self.conn = psycopg2.connect(**config.db_config)
 
     def load_all_names(self):
+        print("Loading all card names for Levenshtein matching...")
+        
         with self.conn.cursor() as cur:
             cur.execute("SELECT DISTINCT name FROM cards;")
             return [row[0] for row in cur.fetchall()]
 
     def fetch_cards(self, limit=100):
+        print("\nFetching normal image URLs from database...")
+
         query = """
             SELECT id, name, image_uris, card_faces
             FROM cards
