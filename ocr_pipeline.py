@@ -23,7 +23,10 @@ class OCRPipeline:
             print(f"Processing: {label} {'[DFC]' if card["is_dfc"] else ''}")
             print(f"  URL:        {card["url"]}")
 
-            img = self.image_processor.fetch_and_crop(card["url"], card["is_dfc"])
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            img = Image.open(BytesIO(response.content)).convert("RGB")
+            img = self.image_processor.crop_image(img, card["is_dfc"])
 
             if save_image:
                 safe_name = label.replace(" ", "_").replace("/", "-")[:60]

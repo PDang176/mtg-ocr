@@ -21,50 +21,62 @@ DFC_CROP_RIGHT_PERCENT = 0.70
 class ImageProcessor:
     def edge_detection(self, image_array):    
         img = image_array.copy()
+        img_contour = image_array.copy()
+        img_bounds = image_array.copy()
+        
+        blurred = cv2.GaussianBlur(img, (5, 5), 0)
+        gray = cv2.cvtColor(blurred, cv2.COLOR_BGR2GRAY)
 
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 100, 140)
+        kernel = np.ones((5, 5), np.uint8)
+        dilated = cv2.dilate(edges, kernel, iterations=1)
 
-        blurred = cv2.GaussianBlur(gray, (9, 9), 0)
-        edges = cv2.Canny(blurred, 25, 120)
+        contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
-        edges = cv2.dilate(edges, kernel, iterations=2)
-        edges = cv2.erode(edges, kernel, iterations=1)
-
-        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
+        width, height = 630, 880
+        img_straight = None
         for c in contours:
             area = cv2.contourArea(c)
+            areaMin = 5000
+            epsilon = 0.02 * cv2.arcLength(c, True)
+            approx = cv2.approxPolyDP(c, epsilon, True)
 
-            # filter noise
-            if area < 3000:
+            if area <= areaMin or len(approx) != 4:
                 continue
 
-            rect = cv2.minAreaRect(c)
-            (cx, cy), (w, h), angle = rect
+            cv2.drawContours(img_contour, c, -1, (0, 0, 255), 7)
+            x, y, w, h = cv2.boundingRect(approx)
+            cv2.rectangle(img_bounds, (x, y), (x + w, y + h), (255, 0, 0), 5)
+            
+            points = []
+            for point in approx:
+                x, y = point[0]
+                points.append((x, y))
 
-            # optional: filter non-card shapes
-            if w == 0 or h == 0:
-                continue
+            def order_points(pts):
+                pts = np.array(pts, dtype="float32")
 
-            aspect = min(w, h) / max(w, h)
+                s = pts.sum(axis=1)
+                diff = np.diff(pts, axis=1)
 
-            # MTG cards ≈ tall rectangles (~0.65 aspect)
-            if aspect < 0.3:
-                continue
+                top_left = pts[np.argmin(s)]
+                bottom_right = pts[np.argmax(s)]
+                top_right = pts[np.argmin(diff)]
+                bottom_left = pts[np.argmax(diff)]
 
-            box = cv2.boxPoints(rect)
-            box = np.int32(box)
+                return np.array([top_left, top_right, bottom_right, bottom_left], dtype="float32")
 
-            cv2.drawContours(img, [box], 0, (0, 0, 255), 2)
+            card = order_points(points)
+            warp = np.array([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]], dtype="float32")
 
-        return img, edges
+            matrix = cv2.getPerspectiveTransform(card, warp)
+            img_straight = cv2.warpPerspective(image_array, matrix, (width, height))
+
+            cv2.imwrite('output_warped.png', img_straight)
+
+        return [image_array, gray, edges, dilated, img_contour, img_bounds], img_straight
     
-    def fetch_and_crop(self, url, is_dfc=False):
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-
-        img = Image.open(BytesIO(response.content)).convert("RGB")
+    def crop_image(self, img, is_dfc=False):
         width, height = img.size
 
         if is_dfc:
