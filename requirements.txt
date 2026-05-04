@@ -6,3 +6,4 @@ numpy
 requests
 pillow
 rapidfuzz
+opencv-python
