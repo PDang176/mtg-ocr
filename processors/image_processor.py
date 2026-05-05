@@ -17,59 +17,129 @@ DFC_CROP_RIGHT_PERCENT = 0.70
 # ─────────────────────────────────────────────────────────────────────────────
 
 class ImageProcessor:
-    def edge_detection(self, image_array):    
+    def __order_points(self, pts):
+        rect = np.zeros((4, 2), dtype="float32")
+
+        s = pts.sum(axis=1)
+        diff = np.diff(pts, axis=1)
+
+        rect[0] = pts[np.argmin(s)]      # TL
+        rect[2] = pts[np.argmax(s)]      # BR
+        rect[1] = pts[np.argmin(diff)]   # TR
+        rect[3] = pts[np.argmax(diff)]   # BL
+
+        return rect
+
+    def __fix_warp(self, image, cards, width=630, height=880):
+        warped_cards = []
+
+        for card, x, y in cards:
+            rect = self.__order_points(card)
+            (tl, tr, br, bl) = rect
+
+            bottom_width = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
+            top_width = np.sqrt( ((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
+            max_width = max(int(bottom_width), int(top_width))
+
+            right_height = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) **2)) 
+            left_height = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) **2))
+            max_height = max(int(right_height), int(left_height)) 
+
+            dest = np.array([
+                [0, 0],
+                [max_width - 1, 0],
+                [max_width - 1, max_height - 1],
+                [0, max_height - 1]
+            ], dtype="float32")
+
+            matrix = cv2.getPerspectiveTransform(rect, dest)
+            warped_card = cv2.warpPerspective(image, matrix, (max_width, max_height))
+
+            if max_width > max_height:
+                center = (max_height / 2, max_height / 2)
+                rotate = cv2.getRotationMatrix2D(center, 270, 1.0)
+                warped_card = cv2. warpAffine(warped_card, rotate, (max_height, max_width))
+
+            warped_cards.append((warped_card, x, y))
+
+        return warped_cards
+
+    def edge_detection(self, image_array):
         img = image_array.copy()
-        img_contour = image_array.copy()
+        img_contours = image_array.copy()
         img_bounds = image_array.copy()
         
-        blurred = cv2.GaussianBlur(img, (5, 5), 0)
-        gray = cv2.cvtColor(blurred, cv2.COLOR_BGR2GRAY)
+        # Normalize Lighting (CLAHE)
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
 
-        edges = cv2.Canny(gray, 100, 140)
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+
+        lab = cv2.merge((l, a, b))
+        img_normalized = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+        # Gaussian Blur
+        img_blurred = cv2.GaussianBlur(img_normalized, (5, 5), 0)
+
+        # Grayscale
+        img_gray = cv2.cvtColor(img_blurred, cv2.COLOR_BGR2GRAY)
+        
+        # Canny Edge Detection
+        img_edges = cv2.Canny(img_gray, 40, 120)
         kernel = np.ones((5, 5), np.uint8)
-        dilated = cv2.dilate(edges, kernel, iterations=1)
+        dilated = cv2.dilate(img_edges, kernel, iterations=1)
+        img_eroded = cv2.erode(dilated, kernel, iterations=1)
 
-        contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        # Find all contours
+        contours, _ = cv2.findContours(img_eroded, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if len(contours) == 0:
+            return ([img, img_normalized, img_blurred, img_gray, img_edges, img_eroded, img_contours, img_bounds], [])
 
-        width, height = 630, 880
-        img_straight = []
+        cards = []
+        minArea = 5000
+
+        # Filter for card shape
         for c in contours:
             area = cv2.contourArea(c)
-            areaMin = 5000
-            epsilon = 0.02 * cv2.arcLength(c, True)
-            approx = cv2.approxPolyDP(c, epsilon, True)
+            if area < minArea:
+                continue
+            
+            rect = cv2.minAreaRect(c)
+            box = cv2.boxPoints(rect)
+            box = np.int32(box)
 
-            if area <= areaMin or len(approx) != 4:
+            if len(box) != 4:
                 continue
 
-            cv2.drawContours(img_contour, c, -1, (0, 0, 255), 7)
-            x, y, w, h = cv2.boundingRect(approx)
-            cv2.rectangle(img_bounds, (x, y), (x + w, y + h), (255, 0, 0), 5)
+            (w, h) = rect[1]
+
+            if w == 0 or h == 0:
+                continue
+
+            aspect_ratio = min(w, h) / max(w, h)
+            if not (0.5 < aspect_ratio < 0.85):
+                continue
+
+            hull = cv2.convexHull(c)
+            hull_area = cv2.contourArea(hull)
+            if hull_area == 0:
+                continue
+
+            solidity = area / hull_area
+            if solidity < 0.9:
+                continue
+
+            cv2.drawContours(img_contours, [box], -1, (0, 0, 255), 6)
+            x, y, w, h = cv2.boundingRect(box)
+            cv2.rectangle(img_bounds, (x, y), (x + w, y + h), (255, 0, 0), 3)
             
-            points = []
-            for point in approx:
-                points.append((point[0][0], point[0][1]))
+            cards.append((box, x, y))
 
-            def order_points(pts):
-                pts = np.array(pts, dtype="float32")
+        # Straighten Cards
+        cards = self.__fix_warp(img, cards)
 
-                s = pts.sum(axis=1)
-                diff = np.diff(pts, axis=1)
-
-                top_left = pts[np.argmin(s)]
-                bottom_right = pts[np.argmax(s)]
-                top_right = pts[np.argmin(diff)]
-                bottom_left = pts[np.argmax(diff)]
-
-                return np.array([top_left, top_right, bottom_right, bottom_left], dtype="float32")
-
-            card = order_points(points)
-            warp = np.array([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]], dtype="float32")
-
-            matrix = cv2.getPerspectiveTransform(card, warp)
-            img_straight.append((cv2.warpPerspective(image_array, matrix, (width, height)), x, y))
-
-        return [image_array, gray, edges, dilated, img_contour, img_bounds], img_straight
+        return ([img, img_normalized, img_blurred, img_gray, img_edges, img_eroded, img_contours, img_bounds], cards)
     
     def crop_image(self, img, is_dfc=False):
         width, height = img.size

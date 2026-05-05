@@ -4,6 +4,7 @@ import sys
 import numpy as np
 import threading
 import time
+import math
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from processors.image_processor import ImageProcessor
@@ -49,6 +50,65 @@ def make_grid(images, rows, cols, scale=0.8):
 
     return cv2.vconcat(grid_rows)
 
+def make_grid(images, scale=0.8, cols=None):
+    if len(images) == 0:
+        return None
+
+    resized = []
+    for img in images:
+        if len(img.shape) == 2:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+
+        h, w = img.shape[:2]
+        new_size = (int(w * scale), int(h * scale))
+        resized.append(cv2.resize(img, new_size))
+
+    n = len(resized)
+    if cols is None:
+        cols = int(math.ceil(math.sqrt(n)))
+    rows = int(math.ceil(n / cols))
+
+    # 3. find max width/height (for padding)
+    max_h = max(img.shape[0] for img in resized)
+    max_w = max(img.shape[1] for img in resized)
+
+    # 4. pad images to same size
+    padded = []
+    for img in resized:
+        h, w = img.shape[:2]
+
+        pad_bottom = max_h - h
+        pad_right = max_w - w
+
+        padded_img = cv2.copyMakeBorder(
+            img,
+            0, pad_bottom,
+            0, pad_right,
+            cv2.BORDER_CONSTANT,
+            value=(0, 0, 0)  # black padding
+        )
+        padded.append(padded_img)
+
+    # 5. fill grid
+    blank = np.zeros((max_h, max_w, 3), dtype=np.uint8)
+    grid_rows = []
+
+    for r in range(rows):
+        row_imgs = []
+        for c in range(cols):
+            idx = r * cols + c
+            if idx < n:
+                row_imgs.append(padded[idx])
+            else:
+                row_imgs.append(blank)
+        grid_rows.append(np.hstack(row_imgs))
+
+    # 6. stack rows
+    grid = np.vstack(grid_rows)
+
+    return grid
+
+
 def run_ocr(image, x, y):
     global card_names
 
@@ -73,24 +133,7 @@ if __name__ == "__main__":
     card_loader = CardLoader(config)
     classifier = CardClassifier(card_loader.load_all_names())
 
-    # current_dir = os.path.dirname(os.path.abspath(__file__))
-    # images_folder = os.path.join(current_dir, '..', 'images',)
-
-    # image_path = os.path.join(images_folder, 'three_cards.jpg')
-    # image = cv2.imread(image_path)
-
-    # if image is not None:
-    #     pictures = processor.edge_detection(image)
-
-    #     for idx, picture in enumerate(pictures):
-    #         output_path = os.path.join(images_folder, f'output_{idx}.jpg')
-    #         cv2.imwrite(output_path, picture)
-    #         print(f"Saved edge-detected image to: {output_path}")
-
-    # else:
-    #     print("Error: Could not read the image.")
-
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
     window_name = "Webcam"
 
     if not cap.isOpened():
@@ -104,13 +147,13 @@ if __name__ == "__main__":
             print("Error: Could not read frame from webcam.")
             break
         
-        images, straight = processor.edge_detection(frame)
+        images, cards = processor.edge_detection(frame)
         
         now = time.time()
 
-        if straight is not None and now - last_ocr_time > OCR_INTERVAL:
+        if cards is not None and now - last_ocr_time > OCR_INTERVAL:
             last_ocr_time = now
-            for crop, x, y in straight:
+            for crop, x, y in cards:
                 threading.Thread(target=run_ocr, args=(crop, x, y), daemon=True).start()
 
         with lock:
@@ -119,7 +162,7 @@ if __name__ == "__main__":
 
         for label, x, y in labels:
             cv2.putText(
-                images[5], 
+                images[7], 
                 label, 
                 (x, y), 
                 cv2.FONT_HERSHEY_COMPLEX, 
@@ -128,7 +171,7 @@ if __name__ == "__main__":
                 2
             )
 
-        cv2.imshow(window_name, make_grid(images, 2, 3, 0.8))
+        cv2.imshow(window_name, make_grid(images))
 
         if cv2.waitKey(1) == ord('q'):
             break
