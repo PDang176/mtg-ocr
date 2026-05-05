@@ -34,7 +34,7 @@ class ImageProcessor:
         contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
         width, height = 630, 880
-        img_straight = None
+        img_straight = []
         for c in contours:
             area = cv2.contourArea(c)
             areaMin = 5000
@@ -50,8 +50,7 @@ class ImageProcessor:
             
             points = []
             for point in approx:
-                x, y = point[0]
-                points.append((x, y))
+                points.append((point[0][0], point[0][1]))
 
             def order_points(pts):
                 pts = np.array(pts, dtype="float32")
@@ -70,9 +69,7 @@ class ImageProcessor:
             warp = np.array([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]], dtype="float32")
 
             matrix = cv2.getPerspectiveTransform(card, warp)
-            img_straight = cv2.warpPerspective(image_array, matrix, (width, height))
-
-            cv2.imwrite('output_warped.png', img_straight)
+            img_straight.append((cv2.warpPerspective(image_array, matrix, (width, height)), x, y))
 
         return [image_array, gray, edges, dilated, img_contour, img_bounds], img_straight
     
