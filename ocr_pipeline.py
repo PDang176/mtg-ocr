@@ -7,6 +7,8 @@ from processors.image_processor import ImageProcessor
 from processors.rapidocr_processor import RapidOCRProcessor
 from card_classifier import CardClassifier, LEV_THRESHOLD
 from PIL import Image
+import requests
+from io import BytesIO
 
 class OCRPipeline:
     def __init__(self, config: Config):
@@ -23,7 +25,7 @@ class OCRPipeline:
             print(f"Processing: {label} {'[DFC]' if card["is_dfc"] else ''}")
             print(f"  URL:        {card["url"]}")
 
-            response = requests.get(url, timeout=10)
+            response = requests.get(card["url"], timeout=10)
             response.raise_for_status()
             img = Image.open(BytesIO(response.content)).convert("RGB")
             img = self.image_processor.crop_image(img, card["is_dfc"])

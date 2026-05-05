@@ -1,9 +1,7 @@
-import requests
 import numpy as np
 import cv2
 
 from PIL import Image
-from io import BytesIO
 
 # ── Tuning knobs (single-face cards) ─────────────────────────────────────────
 CROP_TOP_PERCENT = 0.10
