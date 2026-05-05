@@ -2,6 +2,8 @@ import cv2
 import os
 import sys
 import numpy as np
+import threading
+import time
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from processors.image_processor import ImageProcessor
@@ -13,6 +15,12 @@ from card_classifier import CardClassifier, LEV_THRESHOLD
 from PIL import Image
 
 import cv2
+
+card_names = []
+lock = threading.Lock()
+last_ocr_time = 0
+ocr_done = threading.Event()
+OCR_INTERVAL = 1.0  # seconds
 
 def make_grid(images, rows, cols, scale=0.8):
     processed = []
@@ -41,6 +49,22 @@ def make_grid(images, rows, cols, scale=0.8):
 
     return cv2.vconcat(grid_rows)
 
+def run_ocr(image, x, y):
+    global card_names
+
+    pillow_img = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    cropped_name = processor.crop_image(pillow_img)
+
+    # h, w = cropped_name.shape[:2]
+    # images[5][50:50+h, 50:50+w] = cropped_name
+    raw, clean = ocr.extract_text(cropped_name)
+
+    if raw:
+        best_match, dist, confident = classifier.classify(clean)
+        
+        with lock:
+            card_names.append((f"{best_match} (Distance: {dist})" if confident else "Uncertain", x, y))
+
 if __name__ == "__main__":
     processor = ImageProcessor()
     ocr = RapidOCRProcessor()
@@ -66,7 +90,7 @@ if __name__ == "__main__":
     # else:
     #     print("Error: Could not read the image.")
 
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     window_name = "Webcam"
 
     if not cap.isOpened():
@@ -82,25 +106,27 @@ if __name__ == "__main__":
         
         images, straight = processor.edge_detection(frame)
         
-        if straight is not None:
-            pillow_straight = Image.fromarray(cv2.cvtColor(straight, cv2.COLOR_BGR2RGB))
-            cropped_name = processor.crop_image(pillow_straight)
+        now = time.time()
 
-            h, w = cropped_name.shape[:2]
-            images[5][50:50+h, 50:50+w] = cropped_name
-            # raw, clean = ocr.extract_text(cropped_name)
+        if straight is not None and now - last_ocr_time > OCR_INTERVAL:
+            last_ocr_time = now
+            for crop, x, y in straight:
+                threading.Thread(target=run_ocr, args=(crop, x, y), daemon=True).start()
 
-            # if raw:
-            #     best_match, dist, confident = classifier.classify(clean)
-            #     cv2.putText(
-            #         images[5], 
-            #         (f"{best_match} ({dist})" if confident else "Uncertain"), 
-            #         (10, 30), 
-            #         cv2.FONT_HERSHEY_SIMPLEX, 
-            #         0.7, 
-            #         (0, 255, 0) if confident else (0, 0, 255),
-            #         2
-            #     )
+        with lock:
+            labels = card_names.copy()
+            card_names.clear()
+
+        for label, x, y in labels:
+            cv2.putText(
+                images[5], 
+                label, 
+                (x, y), 
+                cv2.FONT_HERSHEY_COMPLEX, 
+                1.2, 
+                (120, 0, 0),
+                2
+            )
 
         cv2.imshow(window_name, make_grid(images, 2, 3, 0.8))
 
