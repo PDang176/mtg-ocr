@@ -20,7 +20,7 @@ import cv2
 card_names = {}
 last_ocr_time = {}
 lock = threading.Lock()
-OCR_INTERVAL = 2.0  # seconds
+OCR_INTERVAL = 1.0  # seconds
 
 def make_grid(images, scale=0.8, cols=None):
     if len(images) == 0:
@@ -82,10 +82,11 @@ def make_grid(images, scale=0.8, cols=None):
 
 
 def run_ocr(image, card_id):
-    global card_names
-
     pillow_img = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
     cropped_name = processor.crop_image(pillow_img)
+
+    pillow_img.save('output_warped.png')
+    cv2.imwrite('output_cropped.png', cropped_name)
 
     raw, clean = ocr.extract_text(cropped_name)
 
@@ -94,12 +95,11 @@ def run_ocr(image, card_id):
         
         label = f"{best_match} (Distance: {dist})" if confident else "Uncertain"
         
+
         with lock:
             card_names[card_id] = label
 
 if __name__ == "__main__":
-    global card_names, last_ocr_time
-
     processor = ImageProcessor()
     ocr = RapidOCRProcessor()
 
@@ -107,7 +107,7 @@ if __name__ == "__main__":
     card_loader = CardLoader(config)
     classifier = CardClassifier(card_loader.load_all_names())
 
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     window_name = "Webcam"
 
     if not cap.isOpened():
@@ -125,22 +125,24 @@ if __name__ == "__main__":
         
         now = time.time()
 
-        if len(cards) > 0:
-            for box, x, y in cards:
-                card_id = f"{x//25}_{y//25}"
-                last_time = self.last_ocr_time.get(card_id, 0)
+        for card in cards:
+            box, x, y = card
+            card_id = f"{x//25}_{y//25}"
+            last_time = last_ocr_time.get(card_id, 0)
 
-                if now - last_time > self.OCR_INTERVAL:
-                    self.last_ocr_time[card_id] = now
+            if now - last_time > OCR_INTERVAL:
+                last_ocr_time[card_id] = now
 
-                    threading.Thread(target=run_ocr, args=(box, card_id), deamon=True).start()
+                threading.Thread(target=run_ocr, args=(box, card_id), daemon=True).start()
         
         with lock:
             labels = card_names.copy() 
 
-        for box, x, y in boxes:
+        for card in cards:
+            box, x, y = card
             card_id = f"{x//25}_{y//25}"
             label = labels.get(card_id)
+            # print(label)
 
             if label is None:
                 continue
@@ -152,7 +154,7 @@ if __name__ == "__main__":
                 cv2.FONT_HERSHEY_COMPLEX, 
                 1.2, 
                 (255, 0, 0),
-                2
+                5
             )
 
         cv2.imshow(window_name, make_grid(images))

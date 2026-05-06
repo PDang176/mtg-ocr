@@ -4,7 +4,7 @@ import cv2
 from PIL import Image
 
 # ── Tuning knobs (single-face cards) ─────────────────────────────────────────
-CROP_TOP_PERCENT = 0.10
+CROP_TOP_PERCENT = 0.125
 CROP_LEFT_PX = 10
 CROP_RIGHT_PERCENT = 0.75
 GRAYSCALE = False
@@ -94,7 +94,7 @@ class ImageProcessor:
         # Find all contours
         contours, _ = cv2.findContours(img_eroded, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if len(contours) == 0:
-            return ([img, img_normalized, img_blurred, img_gray, img_edges, img_eroded, img_contours, img_bounds], ([], 0, 0))
+            return ([img, img_normalized, img_blurred, img_gray, img_edges, img_eroded, img_contours, img_bounds], [])
 
         cards = []
         minArea = 5000
