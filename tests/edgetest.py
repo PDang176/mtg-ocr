@@ -5,6 +5,7 @@ import numpy as np
 import threading
 import time
 import math
+import queue
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from processors.image_processor import ImageProcessor
@@ -19,6 +20,7 @@ import cv2
 
 card_names = {}
 last_ocr_time = {}
+ocr_queue = queue.Queue()
 lock = threading.Lock()
 OCR_INTERVAL = 1.0  # seconds
 
@@ -80,6 +82,9 @@ def make_grid(images, scale=0.8, cols=None):
 
     return grid
 
+def ocr_worker():
+    while True:
+        box, card_id = ocr_queue.get()
 
 def run_ocr(image, card_id):
     pillow_img = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
@@ -146,7 +151,7 @@ if __name__ == "__main__":
 
             if label is None:
                 continue
-            
+
             cv2.putText(
                 images[7], 
                 label, 
