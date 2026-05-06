@@ -18,11 +18,11 @@ from PIL import Image
 
 import cv2
 
-card_names = {}
-last_ocr_time = {}
-ocr_queue = queue.Queue()
-lock = threading.Lock()
 OCR_INTERVAL = 1.0  # seconds
+card_slots = [
+    {"box": None, "label": None, "last_ocr": 0},
+    {"box": None, "label": None, "last_ocr": 0}
+]
 
 def make_grid(images, scale=0.8, cols=None):
     if len(images) == 0:
@@ -82,27 +82,26 @@ def make_grid(images, scale=0.8, cols=None):
 
     return grid
 
-def ocr_worker():
-    while True:
-        box, card_id = ocr_queue.get()
+def assign_to_slots(cards):
+    if len(cards) == 0:
+        return
 
-def run_ocr(image, card_id):
-    pillow_img = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    cards = sorted(cards, key=lambda b: np.mean(b[:, 0]))
+
+    for i in range(min(2, len(cards))):
+        card_slots[i]["box"] = cards[i]
+
+def run_ocr(slot, box):
+    global processor, ocr, classifier
+
+    pillow_img = Image.fromarray(cv2.cvtColor(box, cv2.COLOR_BGR2RGB))
     cropped_name = processor.crop_image(pillow_img)
-
-    pillow_img.save('output_warped.png')
-    cv2.imwrite('output_cropped.png', cropped_name)
 
     raw, clean = ocr.extract_text(cropped_name)
 
     if raw:
         best_match, dist, confident = classifier.classify(clean)
-        
-        label = f"{best_match} (Distance: {dist})" if confident else "Uncertain"
-        
-
-        with lock:
-            card_names[card_id] = label
+        slot["label"] = best_match if confident else "Uncertain"
 
 if __name__ == "__main__":
     processor = ImageProcessor()
@@ -128,39 +127,39 @@ if __name__ == "__main__":
         
         images, cards = processor.edge_detection(frame)
         
-        now = time.time()
+        assign_to_slots(cards)
 
-        for card in cards:
-            box, x, y = card
-            card_id = f"{x//25}_{y//25}"
-            last_time = last_ocr_time.get(card_id, 0)
+        for slot in card_slots:
 
-            if now - last_time > OCR_INTERVAL:
-                last_ocr_time[card_id] = now
-
-                threading.Thread(target=run_ocr, args=(box, card_id), daemon=True).start()
-        
-        with lock:
-            labels = card_names.copy() 
-
-        for card in cards:
-            box, x, y = card
-            card_id = f"{x//25}_{y//25}"
-            label = labels.get(card_id)
-            # print(label)
-
-            if label is None:
+            box = slot["box"]
+            if box is None:
                 continue
 
+            if now - slot["last_ocr"] > OCR_INTERVAL:
+                slot["last_ocr"] = now
+                run_ocr(slot, box)
+
+        for slot in card_slots:
+
+            box = slot["box"]
+            label = slot["label"]
+
+            if box is None or label is None:
+                continue
+
+            x, y, w, h = cv2.boundingRect(box)
+
             cv2.putText(
-                images[7], 
-                label, 
-                (x, y), 
-                cv2.FONT_HERSHEY_COMPLEX, 
-                1.2, 
+                images[7],
+                label,
+                (x, y),
+                cv2.FONT_HERSHEY_COMPLEX,
+                1.2,
                 (255, 0, 0),
-                5
+                2
             )
+
+            cv2.rectangle(images[7], (x, y), (x + w, y + h), (0, 255, 0), 2)
 
         cv2.imshow(window_name, make_grid(images))
 
