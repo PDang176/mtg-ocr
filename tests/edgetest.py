@@ -20,8 +20,8 @@ import cv2
 
 OCR_INTERVAL = 1.0  # seconds
 card_slots = [
-    {"box": None, "label": None, "last_ocr": 0},
-    {"box": None, "label": None, "last_ocr": 0}
+    {"box": None, "x": 0, "y": 0, "label": None, "last_ocr": 0},
+    {"box": None, "x": 0, "y": 0, "label": None, "last_ocr": 0}
 ]
 
 def make_grid(images, scale=0.8, cols=None):
@@ -86,10 +86,14 @@ def assign_to_slots(cards):
     if len(cards) == 0:
         return
 
-    cards = sorted(cards, key=lambda b: np.mean(b[:, 0]))
-
-    for i in range(min(2, len(cards))):
-        card_slots[i]["box"] = cards[i]
+    for i in range(2):
+        if i < len(cards):
+            box, x, y = cards[i]
+            card_slots[i]["box"] = box
+            card_slots[i]["x"] = x
+            card_slots[i]["y"] = y
+        else:
+            card_slots[i]["box"] = None
 
 def run_ocr(slot, box):
     global processor, ocr, classifier
@@ -126,6 +130,7 @@ if __name__ == "__main__":
             break
         
         images, cards = processor.edge_detection(frame)
+        now = time.time()
         
         assign_to_slots(cards)
 
@@ -142,12 +147,12 @@ if __name__ == "__main__":
         for slot in card_slots:
 
             box = slot["box"]
+            x = slot["x"]
+            y = slot["y"]
             label = slot["label"]
 
             if box is None or label is None:
                 continue
-
-            x, y, w, h = cv2.boundingRect(box)
 
             cv2.putText(
                 images[7],
@@ -159,7 +164,7 @@ if __name__ == "__main__":
                 2
             )
 
-            cv2.rectangle(images[7], (x, y), (x + w, y + h), (0, 255, 0), 2)
+            cv2.imwrite("labeled.png", images[7])
 
         cv2.imshow(window_name, make_grid(images))
 
