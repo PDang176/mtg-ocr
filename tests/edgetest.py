@@ -17,38 +17,10 @@ from PIL import Image
 
 import cv2
 
-card_names = []
+card_names = {}
+last_ocr_time = {}
 lock = threading.Lock()
-last_ocr_time = 0
-ocr_done = threading.Event()
-OCR_INTERVAL = 1.0  # seconds
-
-def make_grid(images, rows, cols, scale=0.8):
-    processed = []
-
-    for img in images:
-        # Handle grayscale → BGR
-        if len(img.shape) == 2:
-            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-
-        # Scale while preserving aspect ratio
-        img_resized = cv2.resize(img, None, fx=scale, fy=scale)
-        processed.append(img_resized)
-
-    # IMPORTANT: all images still need same size for concat
-    # so we normalize them AFTER scaling
-    h = min(img.shape[0] for img in processed)
-    w = min(img.shape[1] for img in processed)
-
-    processed = [cv2.resize(img, (w, h)) for img in processed]
-
-    # Build grid
-    grid_rows = []
-    for r in range(rows):
-        row = cv2.hconcat(processed[r*cols:(r+1)*cols])
-        grid_rows.append(row)
-
-    return cv2.vconcat(grid_rows)
+OCR_INTERVAL = 2.0  # seconds
 
 def make_grid(images, scale=0.8, cols=None):
     if len(images) == 0:
@@ -109,23 +81,25 @@ def make_grid(images, scale=0.8, cols=None):
     return grid
 
 
-def run_ocr(image, x, y):
+def run_ocr(image, card_id):
     global card_names
 
     pillow_img = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
     cropped_name = processor.crop_image(pillow_img)
 
-    # h, w = cropped_name.shape[:2]
-    # images[5][50:50+h, 50:50+w] = cropped_name
     raw, clean = ocr.extract_text(cropped_name)
 
     if raw:
         best_match, dist, confident = classifier.classify(clean)
         
+        label = f"{best_match} (Distance: {dist})" if confident else "Uncertain"
+        
         with lock:
-            card_names.append((f"{best_match} (Distance: {dist})" if confident else "Uncertain", x, y))
+            card_names[card_id] = label
 
 if __name__ == "__main__":
+    global card_names, last_ocr_time
+
     processor = ImageProcessor()
     ocr = RapidOCRProcessor()
 
@@ -151,23 +125,33 @@ if __name__ == "__main__":
         
         now = time.time()
 
-        if cards is not None and now - last_ocr_time > OCR_INTERVAL:
-            last_ocr_time = now
-            for crop, x, y in cards:
-                threading.Thread(target=run_ocr, args=(crop, x, y), daemon=True).start()
+        if len(cards) > 0:
+            for box, x, y in cards:
+                card_id = f"{x//25}_{y//25}"
+                last_time = self.last_ocr_time.get(card_id, 0)
 
+                if now - last_time > self.OCR_INTERVAL:
+                    self.last_ocr_time[card_id] = now
+
+                    threading.Thread(target=run_ocr, args=(box, card_id), deamon=True).start()
+        
         with lock:
-            labels = card_names.copy()
-            card_names.clear()
+            labels = card_names.copy() 
 
-        for label, x, y in labels:
+        for box, x, y in boxes:
+            card_id = f"{x//25}_{y//25}"
+            label = labels.get(card_id)
+
+            if label is None:
+                continue
+            
             cv2.putText(
                 images[7], 
                 label, 
                 (x, y), 
                 cv2.FONT_HERSHEY_COMPLEX, 
                 1.2, 
-                (120, 0, 0),
+                (255, 0, 0),
                 2
             )
 

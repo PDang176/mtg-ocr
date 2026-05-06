@@ -94,7 +94,7 @@ class ImageProcessor:
         # Find all contours
         contours, _ = cv2.findContours(img_eroded, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if len(contours) == 0:
-            return ([img, img_normalized, img_blurred, img_gray, img_edges, img_eroded, img_contours, img_bounds], [])
+            return ([img, img_normalized, img_blurred, img_gray, img_edges, img_eroded, img_contours, img_bounds], ([], 0, 0))
 
         cards = []
         minArea = 5000
