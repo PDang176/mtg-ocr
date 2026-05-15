@@ -17,3 +17,4 @@
 ## Usage
 
 1. Run ocr_pipeline.py for results
+2. Run tests/edgetest.py for use with video feed
