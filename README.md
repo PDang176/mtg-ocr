@@ -3,6 +3,7 @@
 ## Prerequisites
 
 1. Set up Postgresql for your device
+2. Install latest version of Python
 
 ## Setup
 
